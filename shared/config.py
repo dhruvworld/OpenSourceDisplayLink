@@ -1,11 +1,9 @@
 # shared/config.py
 
-HOST = "10.0.0.29"  # Your Mac’s IP
-PORT = 5050         # Or whatever port your app uses
+HOST = "10.0.0.29"  # Your Mac's IP
+PORT = 9999         # Port for the application
 
-
-# The rest can stay the same
-PORT = 9999
+# Display settings
 FRAME_RATE = 30
 IMAGE_FORMAT = "WEBP"
 IMAGE_QUALITY = 90

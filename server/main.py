@@ -1,12 +1,11 @@
-# server/main.py
-
 import socket, threading, time, io
 from PIL import Image
 from shared.config import HOST, PORT, FRAME_RATE, TARGET_RESOLUTION, IMAGE_FORMAT, IMAGE_QUALITY
-from server.capture.mac_capture import capture_screen
+from server.capture.mac_capture import capture_screen  # This returns a PIL.Image object
 
 def encode_frame(image):
     buffer = io.BytesIO()
+    # ✅ Ensure we resize the image, not bytes
     image = image.resize(TARGET_RESOLUTION)
     image.save(buffer, format=IMAGE_FORMAT, quality=IMAGE_QUALITY)
     return buffer.getvalue()
@@ -15,11 +14,10 @@ def handle_client(conn, addr):
     print(f"[CONNECTED] {addr}")
     try:
         while True:
-            frame = capture_screen()
-            data = encode_frame(frame)
+            frame = capture_screen()             # ✅ This is a PIL image
+            data = encode_frame(frame)           # ✅ Encode it as JPEG/WEBP
             size = len(data)
 
-            # Send frame size (4 bytes) + actual image data
             conn.sendall(size.to_bytes(4, byteorder="big"))
             conn.sendall(data)
 

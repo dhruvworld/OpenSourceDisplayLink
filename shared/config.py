@@ -1,5 +1,8 @@
-# This is CORRECT for your Mac
-HOST = "0.0.0.0"  # ← binds to all network interfaces, including Wi-Fi & USB
+# shared/config.py
+
+HOST = "10.0.0.29"  # Your Mac’s IP
+PORT = 5050         # Or whatever port your app uses
+
 
 # The rest can stay the same
 PORT = 9999

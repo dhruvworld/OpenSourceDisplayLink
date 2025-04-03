@@ -14,31 +14,39 @@ from PIL import Image
 import Quartz.CoreGraphics as CG
 
 
-def get_secondary_display():
-    max_displays = 10
-    displays = (CG.CGDirectDisplayID * max_displays)()
-    display_count = CG.uint32_t()
-    CG.CGGetActiveDisplayList(max_displays, displays, display_count)
+def get_working_display():
+    try:
+        max_displays = 10
+        displays = (CG.CGDirectDisplayID * max_displays)()
+        display_count = CG.uint32_t()
+        CG.CGGetActiveDisplayList(max_displays, displays, display_count)
 
-    print(f"[DEBUG] Active Displays: {display_count.value}")
-    for i in range(display_count.value):
-        print(f"  [DISPLAY {i}] ID: {displays[i]}")
+        print(f"[DEBUG] Active Displays: {display_count.value}")
 
-    if display_count.value > 1:
-        print("[INFO] Using secondary display.")
-        return displays[1]
-    else:
-        print("[WARN] Only one display detected. Falling back to main display.")
+        for i in range(display_count.value):
+            display_id = displays[i]
+            print(f"  [DISPLAY {i}] Trying display ID: {display_id}")
+            image_ref = CGDisplayCreateImage(display_id)
+
+            if image_ref:
+                print(f"[INFO] Using display {i} with ID {display_id}")
+                return display_id
+
+        print("[ERROR] No valid display found, defaulting to main.")
+        return CGMainDisplayID()
+
+    except Exception as e:
+        print(f"[FATAL] Could not get displays: {e}")
         return CGMainDisplayID()
 
 
 def capture_screen():
     try:
-        display_id = get_secondary_display()
+        display_id = get_working_display()
         image_ref = CGDisplayCreateImage(display_id)
 
         if not image_ref:
-            print("[ERROR] Display image is null")
+            print("[ERROR] Display image is null.")
             return None
 
         width = CGImageGetWidth(image_ref)

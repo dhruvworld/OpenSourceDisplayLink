@@ -5,11 +5,10 @@ from server.capture.mac_capture import capture_screen  # This returns a PIL.Imag
 
 def encode_frame(image):
     buffer = io.BytesIO()
-    # ✅ Ensure we resize the image, not bytes
-    image = image.resize(TARGET_RESOLUTION).convert("RGB")
-
-    image.save(buffer, format=IMAGE_FORMAT, quality=IMAGE_QUALITY)
+    image = image.resize(TARGET_RESOLUTION).convert("RGB")  # Ensures 3-channel RGB
+    image.save(buffer, format="JPEG", quality=IMAGE_QUALITY)  # Switch to JPEG for testing
     return buffer.getvalue()
+
 
 def handle_client(conn, addr):
     print(f"[CONNECTED] {addr}")

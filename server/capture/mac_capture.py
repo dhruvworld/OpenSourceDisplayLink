@@ -1,26 +1,42 @@
 # server/capture/mac_capture.py
 
-from Quartz import CGGetActiveDisplayList, CGDisplayCreateImage, CGMainDisplayID
-from Quartz import CGImageGetWidth, CGImageGetHeight, CGImageGetBytesPerRow
-from Quartz import CGDataProviderCopyData, CGImageGetDataProvider
-from PIL import Image, ImageDraw
+from Quartz import (
+    CGGetActiveDisplayList,
+    CGDisplayCreateImage,
+    CGMainDisplayID,
+    CGImageGetWidth,
+    CGImageGetHeight,
+    CGImageGetBytesPerRow,
+    CGDataProviderCopyData,
+    CGImageGetDataProvider
+)
+from PIL import Image
 import Quartz.CoreGraphics as CG
+
 
 def get_secondary_display():
     max_displays = 10
     displays = (CG.CGDirectDisplayID * max_displays)()
     display_count = CG.uint32_t()
     CG.CGGetActiveDisplayList(max_displays, displays, display_count)
-    print(f"[DEBUG] Found {display_count.value} displays")
+
+    print(f"[DEBUG] Active Displays: {display_count.value}")
+    for i in range(display_count.value):
+        print(f"  [DISPLAY {i}] ID: {displays[i]}")
 
     if display_count.value > 1:
-        return displays[1]  # Virtual display
-    return displays[0]      # Fallback to primary
+        print("[INFO] Using secondary display.")
+        return displays[1]
+    else:
+        print("[WARN] Only one display detected. Falling back to main display.")
+        return CGMainDisplayID()
+
 
 def capture_screen():
     try:
         display_id = get_secondary_display()
         image_ref = CGDisplayCreateImage(display_id)
+
         if not image_ref:
             print("[ERROR] Display image is null")
             return None
@@ -32,10 +48,6 @@ def capture_screen():
         data = CGDataProviderCopyData(provider)
 
         image = Image.frombytes("RGBA", (width, height), data, "raw", "RGBA", bytes_per_row)
-        # Optional: draw mouse (comment if unwanted)
-        # draw = ImageDraw.Draw(image)
-        # draw.ellipse((100, 100, 110, 110), fill="orange")
-
         return image
 
     except Exception as e:

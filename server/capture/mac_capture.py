@@ -10,29 +10,35 @@ from Quartz import (
     CGDataProviderCopyData,
     CGImageGetDataProvider
 )
-from PIL import Image
 import Quartz.CoreGraphics as CG
+from PIL import Image
+import ctypes
 
 
 def get_working_display():
     try:
         max_displays = 10
-        displays = (CG.CGDirectDisplayID * max_displays)()
-        display_count = CG.uint32_t()
-        CG.CGGetActiveDisplayList(max_displays, displays, display_count)
+        active_displays = (ctypes.c_uint32 * max_displays)()
+        display_count = ctypes.c_uint32(0)
 
-        print(f"[DEBUG] Active Displays: {display_count.value}")
+        result = CG.CGGetActiveDisplayList(
+            max_displays, active_displays, ctypes.byref(display_count)
+        )
+
+        if result != 0:
+            print("[ERROR] CGGetActiveDisplayList failed.")
+            return CGMainDisplayID()
+
+        print(f"[DEBUG] Found {display_count.value} displays")
 
         for i in range(display_count.value):
-            display_id = displays[i]
-            print(f"  [DISPLAY {i}] Trying display ID: {display_id}")
+            display_id = active_displays[i]
             image_ref = CGDisplayCreateImage(display_id)
-
             if image_ref:
-                print(f"[INFO] Using display {i} with ID {display_id}")
+                print(f"[INFO] Using display {i} (ID {display_id})")
                 return display_id
 
-        print("[ERROR] No valid display found, defaulting to main.")
+        print("[WARN] No valid displays found, fallback to main.")
         return CGMainDisplayID()
 
     except Exception as e:
@@ -46,7 +52,7 @@ def capture_screen():
         image_ref = CGDisplayCreateImage(display_id)
 
         if not image_ref:
-            print("[ERROR] Display image is null.")
+            print("[ERROR] Display image is null")
             return None
 
         width = CGImageGetWidth(image_ref)

@@ -1,42 +1,43 @@
-import socket, threading, io, tkinter as tk
-from PIL import Image, ImageTk
-from shared.config import HOST, PORT
+# client/python/gui.py
 
-def receive_frames(sock, canvas, img_id):
-    try:
-        while True:
-            header = sock.recv(4)
-            if not header: break
-            length = int.from_bytes(header, 'big')
-            data = b''
-            while len(data) < length:
-                packet = sock.recv(length - len(data))
-                if not packet: return
-                data += packet
-            image = Image.open(io.BytesIO(data))
-            photo = ImageTk.PhotoImage(image)
-            canvas.itemconfig(img_id, image=photo)
-            canvas.image = photo
-    except Exception as e:
-        print(f"[ERROR] {e}")
-        sock.close()
+import socket, io
+from tkinter import Tk, Label
+from PIL import Image, ImageTk
+from shared.config import HOST, PORT, TARGET_RESOLUTION
+
+def receive_exact(sock, num_bytes):
+    data = b""
+    while len(data) < num_bytes:
+        chunk = sock.recv(num_bytes - len(data))
+        if not chunk:
+            raise ConnectionError("Socket connection broken")
+        data += chunk
+    return data
 
 def start_client():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((HOST, PORT))
+    print("[CONNECTED] to server")
 
-    root = tk.Tk()
-    root.title("DisplayLink Client")
+    root = Tk()
     root.attributes("-fullscreen", True)
+    label = Label(root)
+    label.pack()
 
-    canvas = tk.Canvas(root, bg="black")
-    canvas.pack(fill="both", expand=True)
+    try:
+        while True:
+            size_data = receive_exact(sock, 4)
+            size = int.from_bytes(size_data, byteorder="big")
 
-    placeholder = ImageTk.PhotoImage(Image.new("RGB", (100, 100)))
-    img_id = canvas.create_image(0, 0, anchor="nw", image=placeholder)
-
-    threading.Thread(target=receive_frames, args=(sock, canvas, img_id), daemon=True).start()
-    root.mainloop()
+            frame_data = receive_exact(sock, size)
+            image = Image.open(io.BytesIO(frame_data)).resize(TARGET_RESOLUTION)
+            photo = ImageTk.PhotoImage(image)
+            label.config(image=photo)
+            label.image = photo
+    except Exception as e:
+        print(f"[ERROR] {e}")
+    finally:
+        sock.close()
 
 if __name__ == "__main__":
     start_client()

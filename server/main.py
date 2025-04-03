@@ -1,32 +1,44 @@
-import socket, threading, time
-from shared.config import *
+# server/main.py
+
+import socket, threading, time, io
+from PIL import Image
+from shared.config import HOST, PORT, FRAME_RATE, TARGET_RESOLUTION, IMAGE_FORMAT, IMAGE_QUALITY
 from server.capture.mac_capture import capture_screen
+
+def encode_frame(image):
+    buffer = io.BytesIO()
+    image = image.resize(TARGET_RESOLUTION)
+    image.save(buffer, format=IMAGE_FORMAT, quality=IMAGE_QUALITY)
+    return buffer.getvalue()
 
 def handle_client(conn, addr):
     print(f"[CONNECTED] {addr}")
     try:
         while True:
             frame = capture_screen()
-            if frame:
-                conn.sendall(len(frame).to_bytes(4, 'big'))
-                conn.sendall(frame)
-                print(f"[SENT] {len(frame)} bytes → {addr}")
+            data = encode_frame(frame)
+            size = len(data)
+
+            # Send frame size (4 bytes) + actual image data
+            conn.sendall(size.to_bytes(4, byteorder="big"))
+            conn.sendall(data)
+
+            print(f"[SENT] {size} bytes → {addr}")
             time.sleep(1 / FRAME_RATE)
     except Exception as e:
-        print(f"[DISCONNECTED] {addr} ({e})")
+        print(f"[DISCONNECTED] {addr} {e}")
     finally:
         conn.close()
 
 def start_server():
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind((HOST, PORT))
-    server.listen()
-    print(f"[LISTENING] Server running on {HOST}:{PORT}")
-
-    while True:
-        conn, addr = server.accept()
-        threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind((HOST, PORT))
+        server.listen()
+        print(f"[LISTENING] Server running on {HOST}:{PORT}")
+        while True:
+            conn, addr = server.accept()
+            threading.Thread(target=handle_client, args=(conn, addr)).start()
 
 if __name__ == "__main__":
     start_server()

@@ -1,13 +1,12 @@
 # shared/config.py
 
-# 🖥️ Streaming Configuration
-HOST = "10.0.0.29"       # IP address of your Mac (change if dynamic)
-PORT = 9999              # Port for socket server
-FPS = 30                 # Frames per second to stream
+HOST = "10.0.0.29"  # Your Mac's IP
+PORT = 9999
+FPS = 30
 
-# 🧩 Display Options
-USE_EXTENDED_DISPLAY = True      # If True, will capture secondary display if available
-SELECTED_DISPLAY_ID = None       # (Optional) Override display ID manually if set
+USE_EXTENDED_DISPLAY = True  # Switch using toggle-display.sh
+OVERLAY_MOUSE = True         # Toggle pointer overlay
 
-# 🖱️ Mouse Pointer Overlay
-OVERLAY_MOUSE = True             # Overlay system cursor on captured frames
+COMPRESS_FORMAT = "WEBP"     # Options: 'JPEG' or 'WEBP'
+JPEG_QUALITY = 70            # If using JPEG
+WEBP_QUALITY = 50            # Lower = better compression

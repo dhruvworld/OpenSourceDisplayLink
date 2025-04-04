@@ -1,16 +1,17 @@
 # server/capture/mac_capture.py
 
 import Quartz
-import objc
+import ctypes
 from PIL import Image, ImageDraw
 import numpy as np
 import io
 import sys
 from shared.config import USE_EXTENDED_DISPLAY, OVERLAY_MOUSE
 
+
 def get_display_id():
     max_displays = 16
-    display_count = objc.uint32_t()
+    display_count = ctypes.c_uint32()
     active_displays = (Quartz.CGDirectDisplayID * max_displays)()
     Quartz.CGGetActiveDisplayList(max_displays, active_displays, objc.byref(display_count))
 

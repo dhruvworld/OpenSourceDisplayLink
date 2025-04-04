@@ -1,50 +1,54 @@
-# server/capture/mac_capture.py
-
-import ctypes
-import objc
 import Quartz
+import objc
+from Cocoa import NSEvent
 from PIL import Image
-import io
+from shared.config import TARGET_RESOLUTION, ENABLE_MOUSE_TRACKING, USE_EXTENDED_DISPLAY
 
-def get_display_id():
-    # Setup ctypes access to CoreGraphics
-    CoreGraphics = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
-    
-    max_displays = 16
-    display_count = ctypes.c_uint32(0)
-    active_displays = (ctypes.c_uint32 * max_displays)()
+def capture_screen(target_resolution=TARGET_RESOLUTION):
+    try:
+        max_displays = 16
+        active_displays = (Quartz.CGDirectDisplayID * max_displays)()
+        display_count = objc.uint32_t()
 
-    # Properly pass pointer to display_count
-    result = CoreGraphics.CGGetActiveDisplayList(
-        max_displays,
-        ctypes.byref(active_displays),
-        ctypes.byref(display_count)
-    )
+        result = Quartz.CGGetActiveDisplayList(max_displays, active_displays, objc.byref(display_count))
+        if result != 0 or display_count.value == 0:
+            raise RuntimeError("[FATAL] Could not get active displays")
 
-    if result != 0:
-        raise Exception("CGGetActiveDisplayList failed")
+        # Automatically pick second display if enabled and available
+        display_id = (
+            active_displays[1] if USE_EXTENDED_DISPLAY and display_count.value > 1 else active_displays[0]
+        )
 
-    # Print all display IDs (debug)
-    print(f"[DEBUG] Found {display_count.value} active displays: {list(active_displays)[:display_count.value]}")
-    
-    # Use primary/main display for now (first one)
-    return active_displays[0]
+        image_ref = Quartz.CGDisplayCreateImage(display_id)
+        if image_ref is None:
+            raise RuntimeError("CGDisplayCreateImage returned None")
 
-def capture_screen_webp(quality=90):
-    display_id = get_display_id()
-    image = Quartz.CGDisplayCreateImage(display_id)
-    if image is None:
-        raise Exception("CGDisplayCreateImage failed")
+        width = Quartz.CGImageGetWidth(image_ref)
+        height = Quartz.CGImageGetHeight(image_ref)
+        bytes_per_row = Quartz.CGImageGetBytesPerRow(image_ref)
+        data_provider = Quartz.CGImageGetDataProvider(image_ref)
+        data = Quartz.CGDataProviderCopyData(data_provider)
 
-    width = Quartz.CGImageGetWidth(image)
-    height = Quartz.CGImageGetHeight(image)
-    bytes_per_row = Quartz.CGImageGetBytesPerRow(image)
-    data_provider = Quartz.CGImageGetDataProvider(image)
-    pixel_data = Quartz.CGDataProviderCopyData(data_provider)
-    buffer = bytes(pixel_data)
+        img = Image.frombytes("RGBA", (width, height), data, "raw", "RGBA", bytes_per_row)
+        img = img.resize(target_resolution)
 
-    pil_image = Image.frombuffer("RGBA", (width, height), buffer, "raw", "RGBA", bytes_per_row, 1)
+        # Optional mouse cursor overlay
+        if ENABLE_MOUSE_TRACKING:
+            mouse = NSEvent.mouseLocation()
+            cursor_ref = Quartz.CGDisplayCreateImageForRect(
+                Quartz.CGMainDisplayID(), Quartz.CGRectMake(mouse.x, mouse.y, 32, 32)
+            )
+            if cursor_ref:
+                cursor_img = Image.frombytes(
+                    "RGBA",
+                    (Quartz.CGImageGetWidth(cursor_ref), Quartz.CGImageGetHeight(cursor_ref)),
+                    Quartz.CGDataProviderCopyData(Quartz.CGImageGetDataProvider(cursor_ref)),
+                    "raw", "RGBA"
+                )
+                img.paste(cursor_img, (int(mouse.x), int(height - mouse.y)), cursor_img)
 
-    with io.BytesIO() as output:
-        pil_image.save(output, format="WEBP", quality=quality)
-        return output.getvalue()
+        return img
+
+    except Exception as e:
+        print(f"[ERROR] Screen capture failed: {e}")
+        return None

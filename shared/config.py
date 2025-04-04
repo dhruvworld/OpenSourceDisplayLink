@@ -1,11 +1,12 @@
 # shared/config.py
 
-HOST = "10.0.0.29"         # Your Mac’s IP (from ifconfig)
-PORT = 9999                # Socket port
+HOST = "10.0.0.29"  # Mac IP
+PORT = 9999
 
-# Streaming settings
-FRAME_RATE = 30            # FPS limit
-IMAGE_FORMAT = "JPEG"      # High-efficiency compression
-IMAGE_QUALITY = 90         # 0–100 (higher = better quality)
+FRAME_RATE = 30
+IMAGE_FORMAT = "WEBP"
+IMAGE_QUALITY = 90
+TARGET_RESOLUTION = (1280, 720)
+
 ENABLE_MOUSE_TRACKING = True
-TARGET_RESOLUTION = (1280, 720)  # You can increase to 1920x1080 or 3840x2160 later
+USE_EXTENDED_DISPLAY = True  # 👈 Set to True to prefer second display

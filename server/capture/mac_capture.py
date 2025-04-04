@@ -1,35 +1,38 @@
 # server/capture/mac_capture.py
 
 import Quartz
-import objc
+import ctypes
 import numpy as np
 from PIL import Image
 import io
 from shared.config import USE_EXTENDED_DISPLAY, OVERLAY_MOUSE, COMPRESS_FORMAT, JPEG_QUALITY, WEBP_QUALITY
 
-# ✅ Fix CGDirectDisplayID manually (typedef unsigned int)
-CGDirectDisplayID = objc._C_UINT
+# ✅ Define CGDirectDisplayID manually (C unsigned int)
+CGDirectDisplayID = ctypes.c_uint32
 
 def get_display_id():
     max_displays = 16
-    display_array = (Quartz.CGDirectDisplayID * max_displays)()
-    display_count = objc.uint32()
+    active_displays = (CGDirectDisplayID * max_displays)()
+    display_count = ctypes.c_uint32()
 
-    # ✅ Use ctypes-style binding for count
-    result = Quartz.CGGetActiveDisplayList(max_displays, display_array, objc.byref(display_count))
+    result = Quartz.CGGetActiveDisplayList(
+        max_displays,
+        active_displays,
+        ctypes.byref(display_count)
+    )
+
     if result != 0 or display_count.value == 0:
         raise RuntimeError("No displays detected")
 
-    # ✅ Toggle based on config
     if USE_EXTENDED_DISPLAY and display_count.value > 1:
-        return display_array[1]
-    return display_array[0]
+        return active_displays[1]
+    return active_displays[0]
 
-def get_cursor_overlay():
+def get_cursor_overlay(display_id):
     if not Quartz.CGCursorIsVisible():
         return None
 
-    cursor_image = Quartz.CGDisplayCopyCursorImage(get_display_id())
+    cursor_image = Quartz.CGDisplayCopyCursorImage(display_id)
     if not cursor_image:
         return None
 
@@ -41,7 +44,7 @@ def get_cursor_overlay():
     image_bytes = bytes(data)
 
     image = Image.frombytes("RGBA", (width, height), image_bytes, "raw", "BGRA", bytes_per_row)
-    return image, Quartz.CGDisplayPixelsWide(get_display_id()), Quartz.CGDisplayPixelsHigh(get_display_id())
+    return image
 
 def capture_screen():
     display_id = get_display_id()
@@ -58,14 +61,14 @@ def capture_screen():
     image = image.convert("RGB")
 
     if OVERLAY_MOUSE:
-        pointer_info = get_cursor_overlay()
-        if pointer_info:
-            cursor_img, max_width, max_height = pointer_info
-            mouse_pos = Quartz.CGEventGetLocation(Quartz.CGEventCreate(None))
-            x, y = int(mouse_pos.x), int(max_height - mouse_pos.y)
-            image.paste(cursor_img, (x, y), cursor_img)
+        cursor = get_cursor_overlay(display_id)
+        if cursor:
+            event = Quartz.CGEventCreate(None)
+            loc = Quartz.CGEventGetLocation(event)
+            cursor_x, cursor_y = int(loc.x), int(height - loc.y)
+            image.paste(cursor, (cursor_x, cursor_y), cursor)
 
-    # Compress to JPEG or WebP
+    # Compress frame
     buf = io.BytesIO()
     if COMPRESS_FORMAT == "WEBP":
         image.save(buf, format="WEBP", quality=WEBP_QUALITY)

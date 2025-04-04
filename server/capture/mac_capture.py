@@ -1,62 +1,44 @@
 import Quartz
-import ctypes
+import objc
 from Cocoa import NSEvent
+from Quartz import CGImageGetWidth, CGImageGetHeight, CGImageGetBytesPerRow, CGImageGetBitmapInfo, CGImageGetColorSpace, CGImageGetDataProvider, CGDataProviderCopyData
 from PIL import Image
-
-def get_extended_display_id():
-    max_displays = 16
-    active_displays = (Quartz.CGDirectDisplayID * max_displays)()
-    display_count = ctypes.c_uint32(0)
-
-    result = Quartz.CGGetActiveDisplayList(
-        max_displays,
-        active_displays,
-        ctypes.byref(display_count)
-    )
-
-    if result != 0 or display_count.value == 0:
-        raise RuntimeError("[FATAL] Could not get displays")
-
-    if display_count.value == 1:
-        print("[INFO] Only one display detected. Using main display.")
-        return active_displays[0]
-    else:
-        print(f"[INFO] Using extended display [Index 1] out of {display_count.value}")
-        return active_displays[1]  # Second display (index 1)
 
 def capture_screen(target_resolution=(1920, 1080)):
     try:
-        display_id = get_extended_display_id()
+        max_displays = 16
+        active_displays = (Quartz.CGDirectDisplayID * max_displays)()
+        display_count = objc.allocateBuffer(4)  # Allocate raw buffer
+
+        # ✅ Correct usage of display list fetch with NULL pointer
+        result = Quartz.CGGetActiveDisplayList(max_displays, active_displays, display_count)
+        if result != 0:
+            raise RuntimeError(f"[FATAL] Could not get displays: CGGetActiveDisplayList error {result}")
+
+        count = int.from_bytes(display_count[:4], byteorder="little")
+
+        if count == 0:
+            raise RuntimeError("[FATAL] No displays found")
+
+        # ✅ Select extended display if available
+        display_id = active_displays[1] if count > 1 else active_displays[0]
         image_ref = Quartz.CGDisplayCreateImage(display_id)
-
         if not image_ref:
-            raise RuntimeError("[FATAL] Could not capture screen image")
+            raise RuntimeError("[FATAL] Could not create image from display")
 
-        width = Quartz.CGImageGetWidth(image_ref)
-        height = Quartz.CGImageGetHeight(image_ref)
-        bytes_per_row = Quartz.CGImageGetBytesPerRow(image_ref)
-        data_provider = Quartz.CGImageGetDataProvider(image_ref)
-        data = Quartz.CGDataProviderCopyData(data_provider)
+        width = CGImageGetWidth(image_ref)
+        height = CGImageGetHeight(image_ref)
+        bytes_per_row = CGImageGetBytesPerRow(image_ref)
+        bitmap_info = CGImageGetBitmapInfo(image_ref)
+        color_space = CGImageGetColorSpace(image_ref)
+        data_provider = CGImageGetDataProvider(image_ref)
+        data = CGDataProviderCopyData(data_provider)
 
+        # Convert to PIL image
         img = Image.frombytes("RGBA", (width, height), data, "raw", "RGBA", bytes_per_row)
 
-        # Resize to target resolution
+        # Resize for transmission
         img = img.resize(target_resolution)
-
-        # Optional: Draw mouse cursor
-        mouse_location = NSEvent.mouseLocation()
-        cursor_img = Quartz.CGDisplayCreateImageForRect(
-            display_id, Quartz.CGRectMake(mouse_location.x, mouse_location.y, 32, 32)
-        )
-        if cursor_img:
-            cursor_pil = Image.frombytes(
-                "RGBA",
-                (Quartz.CGImageGetWidth(cursor_img), Quartz.CGImageGetHeight(cursor_img)),
-                Quartz.CGDataProviderCopyData(Quartz.CGImageGetDataProvider(cursor_img)),
-                "raw",
-                "RGBA"
-            )
-            img.paste(cursor_pil, (int(mouse_location.x), int(height - mouse_location.y)), cursor_pil)
 
         return img
 

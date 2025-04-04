@@ -1,53 +1,50 @@
-# client/python/gui.py
+# client/gui.py
 
-import socket, io
-from tkinter import Tk, Label
-from PIL import Image, ImageTk, UnidentifiedImageError
-from shared.config import HOST, PORT, TARGET_RESOLUTION
+import socket
+import struct
+import io
+from PIL import Image, ImageTk
+import tkinter as tk
 
-def receive_exact(sock, size):
-    data = b""
-    while len(data) < size:
-        chunk = sock.recv(size - len(data))
-        if not chunk:
-            raise ConnectionError("Socket connection broken")
-        data += chunk
-    return data
+HOST = '10.0.0.29'
+PORT = 9999
 
-def start_client():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((HOST, PORT))
-    print("[CONNECTED] to server")
+def receive_frame(sock):
+    try:
+        size_data = sock.recv(4)
+        if not size_data:
+            return None
+        size = struct.unpack('>I', size_data)[0]
+        data = b''
+        while len(data) < size:
+            packet = sock.recv(size - len(data))
+            if not packet:
+                return None
+            data += packet
+        return Image.open(io.BytesIO(data))
+    except Exception as e:
+        print(f"[ERROR] Receiving failed: {e}")
+        return None
 
-    root = Tk()
-    root.title("OpenSourceDisplayLink Viewer")
-    root.geometry(f"{TARGET_RESOLUTION[0]}x{TARGET_RESOLUTION[1]}")
-    label = Label(root)
+def main():
+    root = tk.Tk()
+    root.title("Live Feed")
+    label = tk.Label(root)
     label.pack()
 
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((HOST, PORT))
+
     def update_frame():
-        try:
-            size_data = receive_exact(sock, 4)
-            size = int.from_bytes(size_data, byteorder="big")
-            frame_data = receive_exact(sock, size)
-
-            image = Image.open(io.BytesIO(frame_data))
-            image = image.resize(TARGET_RESOLUTION)
-            photo = ImageTk.PhotoImage(image)
-
+        img = receive_frame(sock)
+        if img:
+            photo = ImageTk.PhotoImage(img)
             label.config(image=photo)
             label.image = photo
-
-        except (ConnectionError, UnidentifiedImageError) as e:
-            print(f"[ERROR] {e}")
-            root.destroy()
-            sock.close()
-            return
-
-        root.after(1, update_frame)  # Schedule next frame
+        root.after(1, update_frame)
 
     update_frame()
     root.mainloop()
 
 if __name__ == "__main__":
-    start_client()
+    main()

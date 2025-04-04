@@ -10,7 +10,6 @@ from shared.config import HOST, PORT, FRAME_RATE, IMAGE_FORMAT, IMAGE_QUALITY, T
 
 def encode_frame(image):
     buffer = io.BytesIO()
-    image = image.resize(TARGET_RESOLUTION).convert("RGB")
     image.save(buffer, format=IMAGE_FORMAT, quality=IMAGE_QUALITY)
     return buffer.getvalue()
 
@@ -18,7 +17,7 @@ def handle_client(conn, addr):
     print(f"[CONNECTED] {addr}")
     try:
         while True:
-            frame = capture_screen()
+            frame = capture_screen(TARGET_RESOLUTION)
             if frame is None:
                 time.sleep(0.2)
                 continue

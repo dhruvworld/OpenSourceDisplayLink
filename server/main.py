@@ -2,26 +2,19 @@
 
 import socket
 import threading
-import io
-from PIL import Image
 from server.capture.mac_capture import capture_screen
-from shared.config import HOST, PORT, FPS
-import time
+from shared.config import HOST, PORT
 
 def client_handler(conn, addr):
     print(f"[CONNECTED] {addr}")
-    while True:
-        frame = capture_screen()
-        if frame:
-            with io.BytesIO() as buffer:
-                frame.save(buffer, format="JPEG", quality=80)
-                data = buffer.getvalue()
-            try:
-                conn.sendall(len(data).to_bytes(4, 'big') + data)
-            except Exception:
-                break
-        time.sleep(1 / FPS)
-    conn.close()
+    try:
+        while True:
+            frame = capture_screen()
+            conn.sendall(frame)
+    except Exception as e:
+        print(f"[ERROR] Connection error: {e}")
+    finally:
+        conn.close()
 
 def start_server():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -30,8 +23,7 @@ def start_server():
     print(f"[LISTENING] Server running on {HOST}:{PORT}")
     while True:
         conn, addr = server.accept()
-        thread = threading.Thread(target=client_handler, args=(conn, addr))
-        thread.start()
+        threading.Thread(target=client_handler, args=(conn, addr)).start()
 
 if __name__ == "__main__":
     start_server()

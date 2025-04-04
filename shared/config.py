@@ -1,12 +1,8 @@
 # shared/config.py
 
-HOST = "10.0.0.29"  # Your Mac's IP
+HOST = "10.0.0.29"  # Mac IP (Update as needed)
 PORT = 9999
 FPS = 30
 
-USE_EXTENDED_DISPLAY = True  # Switch using toggle-display.sh
-OVERLAY_MOUSE = True         # Toggle pointer overlay
-
-COMPRESS_FORMAT = "WEBP"     # Options: 'JPEG' or 'WEBP'
-JPEG_QUALITY = 70            # If using JPEG
-WEBP_QUALITY = 50            # Lower = better compression
+USE_EXTENDED_DISPLAY = True   # True = Extended, False = Main
+OVERLAY_MOUSE = True          # Show red circle at pointer

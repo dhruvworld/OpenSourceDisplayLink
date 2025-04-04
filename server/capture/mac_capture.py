@@ -1,60 +1,55 @@
-# server/capture/mac_capture.py
-import Quartz
 import objc
+from Quartz import CGDisplayCreateImage, CGGetActiveDisplayList, CGMainDisplayID, CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData
+from Cocoa import NSEvent
+from PIL import Image
 import numpy as np
-from PIL import Image, ImageDraw
-from io import BytesIO
-from shared.config import USE_EXTENDED_DISPLAY, OVERLAY_MOUSE
+import io
+
+from shared.config import FPS, USE_EXTENDED_DISPLAY, OVERLAY_MOUSE
 
 def get_display_id():
     max_displays = 16
-    active_displays = (Quartz.CGDirectDisplayID * max_displays)()
-    display_count = objc.typedPointer(objc._C_UINT)(0)
-    
-    result = Quartz.CGGetActiveDisplayList(max_displays, active_displays, display_count)
-    if result != 0:
-        raise RuntimeError("CGGetActiveDisplayList failed")
+    display_array = (objc.typedPointer('I') * max_displays)()
+    display_count = objc.typedPointer('I')()
 
-    display_ids = [active_displays[i] for i in range(display_count.value)]
-    
-    if USE_EXTENDED_DISPLAY and len(display_ids) > 1:
-        print(f"[DISPLAY] Using EXTENDED display: {display_ids[1]}")
-        return display_ids[1]
+    result = CGGetActiveDisplayList(max_displays, display_array, display_count)
+    if result != 0:
+        raise Exception("Failed to get display list")
+
+    displays = display_array[:display_count[0]]
+
+    if USE_EXTENDED_DISPLAY and len(displays) > 1:
+        print(f"[DISPLAY] Using EXTENDED display: {displays[1]}")
+        return displays[1]
     else:
-        print(f"[DISPLAY] Using MAIN display: {display_ids[0]}")
-        return display_ids[0]
+        print(f"[DISPLAY] Using MAIN display: {displays[0]}")
+        return displays[0]
 
 def capture_screen():
     display_id = get_display_id()
-    image = Quartz.CGDisplayCreateImage(display_id)
-    if image is None:
+    image = CGDisplayCreateImage(display_id)
+
+    if not image:
         raise RuntimeError("Failed to capture screen")
 
-    width = Quartz.CGImageGetWidth(image)
-    height = Quartz.CGImageGetHeight(image)
-    bytes_per_row = Quartz.CGImageGetBytesPerRow(image)
-    data_provider = Quartz.CGImageGetDataProvider(image)
-    data = Quartz.CGDataProviderCopyData(data_provider)
-    
-    buffer = np.frombuffer(data, dtype=np.uint8)
-    buffer = buffer.reshape((height, bytes_per_row // 4, 4))
-    rgb_frame = buffer[:, :width, :3]
+    width = CGImageGetWidth(image)
+    height = CGImageGetHeight(image)
+    provider = image.dataProvider()
+    data = CGDataProviderCopyData(provider)
+    buffer = np.frombuffer(data, dtype=np.uint8).reshape((height, width, 4))
 
-    img = Image.fromarray(rgb_frame, 'RGB')
+    rgb_array = buffer[:, :, :3]  # Drop alpha
+    img = Image.fromarray(rgb_array)
 
     if OVERLAY_MOUSE:
-        img = draw_mouse_pointer(img)
+        try:
+            x, y = NSEvent.mouseLocation()
+            y = height - int(y)
+            draw = ImageDraw.Draw(img)
+            draw.ellipse((x-10, y-10, x+10, y+10), outline="red", width=2)
+        except Exception as e:
+            print(f"[WARNING] Mouse overlay failed: {e}")
 
-    with BytesIO() as output:
-        img.save(output, format="WebP", quality=80)
-        return output.getvalue()
-
-def draw_mouse_pointer(img):
-    cursor_pos = Quartz.NSEvent.mouseLocation()
-    screen_height = Quartz.CGDisplayPixelsHigh(Quartz.CGMainDisplayID())
-    x, y = int(cursor_pos.x), int(screen_height - cursor_pos.y)
-
-    draw = ImageDraw.Draw(img)
-    radius = 10
-    draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill="red")
-    return img
+    output = io.BytesIO()
+    img.save(output, format="WebP", quality=90)
+    return output.getvalue()

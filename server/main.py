@@ -6,7 +6,7 @@ import time
 import io
 from PIL import Image
 from server.capture.mac_capture import capture_screen
-from shared.config import HOST, PORT, FRAME_RATE, IMAGE_FORMAT, IMAGE_QUALITY, TARGET_RESOLUTION
+from shared.config import HOST, PORT, FRAME_RATE, IMAGE_FORMAT, IMAGE_QUALITY, TARGET_RESOLUTION, DISPLAY_INDEX
 
 def encode_frame(image):
     buffer = io.BytesIO()
@@ -17,19 +17,16 @@ def handle_client(conn, addr):
     print(f"[CONNECTED] {addr}")
     try:
         while True:
-            frame = capture_screen(TARGET_RESOLUTION)
+            frame = capture_screen(target_resolution=TARGET_RESOLUTION, display_index=DISPLAY_INDEX)
             if frame is None:
-                time.sleep(0.2)
                 continue
-
             encoded = encode_frame(frame)
             size = len(encoded)
             conn.sendall(size.to_bytes(4, 'big'))
             conn.sendall(encoded)
-            print(f"[SENT] {size} bytes → {addr}")
             time.sleep(1 / FRAME_RATE)
     except Exception as e:
-        print(f"[DISCONNECTED] {addr} {e}")
+        print(f"[DISCONNECTED] {addr} - {e}")
     finally:
         conn.close()
 

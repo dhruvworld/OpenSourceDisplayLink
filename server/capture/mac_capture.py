@@ -1,8 +1,9 @@
 import Quartz
-import objc
-from Cocoa import NSEvent
-from Quartz import CGImageGetWidth, CGImageGetHeight, CGImageGetBytesPerRow, CGImageGetBitmapInfo, CGImageGetColorSpace, CGImageGetDataProvider, CGDataProviderCopyData
+from Cocoa import NSScreen, NSRect
 from PIL import Image
+import ctypes
+import objc
+import io
 import sys
 from shared.config import TARGET_RESOLUTION, USE_EXTENDED_DISPLAY, DISPLAY_INDEX, FALLBACK_TO_MAIN_DISPLAY, DEBUG_MODE
 
@@ -11,65 +12,73 @@ def capture_screen(target_resolution=None):
         target_resolution = TARGET_RESOLUTION
         
     try:
-        max_displays = 16
-        active_displays = (Quartz.CGDirectDisplayID * max_displays)()
-        display_count = objc.allocateBuffer(4)  # Allocate raw buffer
-
-        # Get display list
-        result = Quartz.CGGetActiveDisplayList(max_displays, active_displays, display_count)
-        if result != 0:
-            raise RuntimeError(f"[FATAL] Could not get displays: CGGetActiveDisplayList error {result}")
-
-        count = int.from_bytes(display_count[:4], byteorder="little")
-
-        if count == 0:
+        # Get screen information using NSScreen
+        screens = NSScreen.screens()
+        
+        if not screens or len(screens) == 0:
             raise RuntimeError("[FATAL] No displays found")
-
+            
         if DEBUG_MODE:
-            print(f"[DEBUG] Found {count} displays")
+            print(f"[DEBUG] Found {len(screens)} displays")
             
         # Select appropriate display based on config
-        selected_display_index = 0  # Default to main display
+        selected_display_index = 0
         
-        if USE_EXTENDED_DISPLAY and count > 1:
-            # Use extended display (usually index 1)
+        if USE_EXTENDED_DISPLAY and len(screens) > 1:
             selected_display_index = 1
-        elif DISPLAY_INDEX < count:
-            # Use specifically configured display index
+        elif DISPLAY_INDEX < len(screens):
             selected_display_index = DISPLAY_INDEX
-        elif DISPLAY_INDEX >= count and FALLBACK_TO_MAIN_DISPLAY:
-            # Fallback to main display
+        elif DISPLAY_INDEX >= len(screens) and FALLBACK_TO_MAIN_DISPLAY:
             selected_display_index = 0
         else:
-            # Specified display index is out of range and no fallback
-            raise RuntimeError(f"[FATAL] Requested display index {DISPLAY_INDEX} not available (only {count} displays found)")
+            raise RuntimeError(f"[FATAL] Requested display index {DISPLAY_INDEX} not available (only {len(screens)} displays found)")
             
         if DEBUG_MODE:
             print(f"[DEBUG] Using display at index {selected_display_index}")
             
-        # Get the display ID
-        display_id = active_displays[selected_display_index]
+        # Get the selected screen
+        screen = screens[selected_display_index]
         
-        # Create image from display
-        image_ref = Quartz.CGDisplayCreateImage(display_id)
+        # Get screen dimensions
+        frame = screen.frame()
+        width = int(frame.size.width)
+        height = int(frame.size.height)
+        x = int(frame.origin.x)
+        y = int(frame.origin.y)
+        
+        if DEBUG_MODE:
+            print(f"[DEBUG] Screen dimensions: {width}x{height} at position ({x},{y})")
+        
+        # Capture the screen content
+        region = Quartz.CGRectMake(x, y, width, height)
+        image_ref = Quartz.CGWindowListCreateImage(
+            region,
+            Quartz.kCGWindowListOptionOnScreenOnly,
+            Quartz.kCGNullWindowID,
+            Quartz.kCGWindowImageDefault
+        )
+        
         if not image_ref:
             raise RuntimeError("[FATAL] Could not create image from display")
-
-        # Process image data
-        width = CGImageGetWidth(image_ref)
-        height = CGImageGetHeight(image_ref)
-        bytes_per_row = CGImageGetBytesPerRow(image_ref)
-        bitmap_info = CGImageGetBitmapInfo(image_ref)
-        color_space = CGImageGetColorSpace(image_ref)
-        data_provider = CGImageGetDataProvider(image_ref)
-        data = CGDataProviderCopyData(data_provider)
-
+        
+        # Get image dimensions
+        width = Quartz.CGImageGetWidth(image_ref)
+        height = Quartz.CGImageGetHeight(image_ref)
+        bytes_per_row = Quartz.CGImageGetBytesPerRow(image_ref)
+        
+        # Get image data
+        data_provider = Quartz.CGImageGetDataProvider(image_ref)
+        data = Quartz.CGDataProviderCopyData(data_provider)
+        
         # Convert to PIL image
-        img = Image.frombytes("RGBA", (width, height), data, "raw", "RGBA", bytes_per_row)
-
+        img = Image.frombytes("RGBA", (width, height), data, "raw", "BGRA", bytes_per_row)
+        
         # Resize for transmission
         img = img.resize(target_resolution)
-
+        
+        # Release resources
+        del data
+        
         return img
 
     except Exception as e:

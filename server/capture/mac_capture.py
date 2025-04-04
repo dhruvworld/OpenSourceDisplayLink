@@ -12,21 +12,22 @@ CGDirectDisplayID = ctypes.c_uint32
 
 def get_display_id():
     max_displays = 16
-    active_displays = (CGDirectDisplayID * max_displays)()
-    display_count = ctypes.c_uint32()
+    display_array = (CGDirectDisplayID * max_displays)()
+    display_count = ctypes.pointer(ctypes.c_uint32())
 
     result = Quartz.CGGetActiveDisplayList(
         max_displays,
-        active_displays,
-        ctypes.byref(display_count)
+        display_array,
+        display_count
     )
 
-    if result != 0 or display_count.value == 0:
+    if result != 0 or display_count.contents.value == 0:
         raise RuntimeError("No displays detected")
 
-    if USE_EXTENDED_DISPLAY and display_count.value > 1:
-        return active_displays[1]
-    return active_displays[0]
+    if USE_EXTENDED_DISPLAY and display_count.contents.value > 1:
+        return display_array[1]
+    return display_array[0]
+
 
 def get_cursor_overlay(display_id):
     if not Quartz.CGCursorIsVisible():

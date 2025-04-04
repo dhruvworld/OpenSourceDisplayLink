@@ -1,54 +1,49 @@
-# client/gui.py
+# client/python/gui.py
 
 import socket
-import struct
+import io
 import tkinter as tk
 from PIL import Image, ImageTk
-import io
 from shared.config import HOST, PORT
 
-class ScreenClient(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Screen Client")
-        self.attributes("-fullscreen", True)
-
-        self.bind("<Escape>", lambda e: self.destroy())
-        self.bind("<F11>", self.toggle_fullscreen)
-        self.fullscreen = True
-
-        self.label = tk.Label(self)
-        self.label.pack(expand=True)
-
+class ScreenClient:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Mac Screen Viewer")
+        self.fullscreen = False
+        self.label = tk.Label(self.root)
+        self.label.pack(fill=tk.BOTH, expand=True)
+        self.root.bind("<f>", self.toggle_fullscreen)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((HOST, PORT))
-
-        self.after(0, self.receive_frame)
+        self.update_frame()
 
     def toggle_fullscreen(self, event=None):
         self.fullscreen = not self.fullscreen
-        self.attributes("-fullscreen", self.fullscreen)
+        self.root.attributes("-fullscreen", self.fullscreen)
 
-    def receive_frame(self):
+    def update_frame(self):
         try:
-            raw_size = self.sock.recv(4)
-            if not raw_size:
-                return
-            size = struct.unpack('>I', raw_size)[0]
-            data = b''
+            size_bytes = self.sock.recv(8)
+            size = int.from_bytes(size_bytes, byteorder="big")
+            data = b""
             while len(data) < size:
                 packet = self.sock.recv(size - len(data))
                 if not packet:
-                    return
+                    break
                 data += packet
-            image = Image.open(io.BytesIO(data))
-            photo = ImageTk.PhotoImage(image.resize((self.winfo_width(), self.winfo_height())))
+            img = Image.open(io.BytesIO(data)).convert("RGB")
+            screen_width = self.root.winfo_width()
+            screen_height = self.root.winfo_height()
+            img = img.resize((screen_width, screen_height), Image.LANCZOS)
+            photo = ImageTk.PhotoImage(image=img)
             self.label.config(image=photo)
             self.label.image = photo
         except Exception as e:
-            print(f"[CLIENT ERROR] {e}")
-        self.after(1, self.receive_frame)
+            print(f"[ERROR] Frame receive failed: {e}")
+        self.root.after(1000 // 30, self.update_frame)
 
 if __name__ == "__main__":
-    app = ScreenClient()
-    app.mainloop()
+    root = tk.Tk()
+    app = ScreenClient(root)
+    root.mainloop()

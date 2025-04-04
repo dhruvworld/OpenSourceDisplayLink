@@ -1,8 +1,13 @@
 # shared/config.py
 
-HOST = "10.0.0.29"  # Your Mac's IP
-PORT = 9999
-FPS = 30
+# 🖥️ Streaming Configuration
+HOST = "10.0.0.29"       # IP address of your Mac (change if dynamic)
+PORT = 9999              # Port for socket server
+FPS = 30                 # Frames per second to stream
 
-USE_EXTENDED_DISPLAY = True  # Toggle this via shell script
-OVERLAY_MOUSE = True         # Set to False to disable mouse pointer
+# 🧩 Display Options
+USE_EXTENDED_DISPLAY = True      # If True, will capture secondary display if available
+SELECTED_DISPLAY_ID = None       # (Optional) Override display ID manually if set
+
+# 🖱️ Mouse Pointer Overlay
+OVERLAY_MOUSE = True             # Overlay system cursor on captured frames

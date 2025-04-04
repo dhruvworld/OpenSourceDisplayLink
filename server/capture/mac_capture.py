@@ -1,50 +1,60 @@
 # server/capture/mac_capture.py
-
 import Quartz
-import ctypes
-from PIL import Image, ImageDraw
+import objc
 import numpy as np
-import io
-import sys
+from PIL import Image, ImageDraw
+from io import BytesIO
 from shared.config import USE_EXTENDED_DISPLAY, OVERLAY_MOUSE
-
 
 def get_display_id():
     max_displays = 16
-    display_count = ctypes.c_uint32()
     active_displays = (Quartz.CGDirectDisplayID * max_displays)()
-    Quartz.CGGetActiveDisplayList(max_displays, active_displays, objc.byref(display_count))
+    display_count = objc.typedPointer(objc._C_UINT)(0)
+    
+    result = Quartz.CGGetActiveDisplayList(max_displays, active_displays, display_count)
+    if result != 0:
+        raise RuntimeError("CGGetActiveDisplayList failed")
 
-    display_ids = active_displays[:display_count.value]
-
+    display_ids = [active_displays[i] for i in range(display_count.value)]
+    
     if USE_EXTENDED_DISPLAY and len(display_ids) > 1:
         print(f"[DISPLAY] Using EXTENDED display: {display_ids[1]}")
         return display_ids[1]
-    print(f"[DISPLAY] Using MAIN display: {display_ids[0]}")
-    return display_ids[0]
+    else:
+        print(f"[DISPLAY] Using MAIN display: {display_ids[0]}")
+        return display_ids[0]
 
 def capture_screen():
     display_id = get_display_id()
-    image_ref = Quartz.CGDisplayCreateImage(display_id)
-    if not image_ref:
+    image = Quartz.CGDisplayCreateImage(display_id)
+    if image is None:
         raise RuntimeError("Failed to capture screen")
 
-    provider = Quartz.CGImageGetDataProvider(image_ref)
-    data = Quartz.CGDataProviderCopyData(provider)
-    width = Quartz.CGImageGetWidth(image_ref)
-    height = Quartz.CGImageGetHeight(image_ref)
-    bpp = Quartz.CGImageGetBitsPerPixel(image_ref) // 8
+    width = Quartz.CGImageGetWidth(image)
+    height = Quartz.CGImageGetHeight(image)
+    bytes_per_row = Quartz.CGImageGetBytesPerRow(image)
+    data_provider = Quartz.CGImageGetDataProvider(image)
+    data = Quartz.CGDataProviderCopyData(data_provider)
+    
+    buffer = np.frombuffer(data, dtype=np.uint8)
+    buffer = buffer.reshape((height, bytes_per_row // 4, 4))
+    rgb_frame = buffer[:, :width, :3]
 
-    np_image = np.frombuffer(data, dtype=np.uint8).reshape((height, width, bpp))[:, :, :3]
-    image = Image.fromarray(np_image, 'RGB')
+    img = Image.fromarray(rgb_frame, 'RGB')
 
     if OVERLAY_MOUSE:
-        mouse_pos = Quartz.NSEvent.mouseLocation()
-        mouse_x = int(mouse_pos.x)
-        mouse_y = int(Quartz.CGDisplayPixelsHigh(display_id) - mouse_pos.y)
-        draw = ImageDraw.Draw(image)
-        draw.ellipse((mouse_x - 5, mouse_y - 5, mouse_x + 5, mouse_y + 5), fill="red")
+        img = draw_mouse_pointer(img)
 
-    buffer = io.BytesIO()
-    image.save(buffer, format="WebP", quality=80)
-    return buffer.getvalue()
+    with BytesIO() as output:
+        img.save(output, format="WebP", quality=80)
+        return output.getvalue()
+
+def draw_mouse_pointer(img):
+    cursor_pos = Quartz.NSEvent.mouseLocation()
+    screen_height = Quartz.CGDisplayPixelsHigh(Quartz.CGMainDisplayID())
+    x, y = int(cursor_pos.x), int(screen_height - cursor_pos.y)
+
+    draw = ImageDraw.Draw(img)
+    radius = 10
+    draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill="red")
+    return img
